@@ -1,7 +1,7 @@
 from itertools import product
 
-DIE_FACES = 3
-PLAYERS = 2
+DIE_FACES = 2
+PLAYERS = 3
 
 
 class Bet:
@@ -24,11 +24,15 @@ class RegBet:
         """Bet represented as a letter (like in Lanctot paper)."""
         return chr(ord('a') + (self.dices - 1) * DIE_FACES + (self.faces - 1))
 
-    def possible_bets_afterwards(self):
+    def possible_reg_bets_afterwards(self):
         for faces in range(self.faces + 1, DIE_FACES + 1):
             yield RegBet(self.dices, faces)
         for i in product(range(self.dices + 1, PLAYERS + 1), range(1, DIE_FACES + 1)):
             yield RegBet(*i)
+
+    def possible_bets_afterwards(self):
+        for bet in self.possible_reg_bets_afterwards():
+            yield bet
         yield CallBluff()
 
     def __eq__(self, other):
@@ -39,6 +43,9 @@ class CallBluff:
     def __str__(self):
         """Bet represented as a letter (like in Lanctot paper)."""
         return chr(ord('a') + PLAYERS * DIE_FACES)
+
+    def possible_reg_bets_afterwards(self):
+        return iter(())
 
     def possible_bets_afterwards(self):
         # empty generator
@@ -166,7 +173,7 @@ def A_val(x_move, y_move):
     if not x_move.last_bet == CallBluff() and not y_move.last_bet == CallBluff():
         return 0  # to jeszcze nie jest czas wyplaty
 
-    if len(y_move.bets_made) % 3 == 0:
+    if len(y_move.bets_made) % 3 == 0 and y_move.last_bet == CallBluff():
         return 1  # ktorys z graczy y odpada
 
     if x_move.last_bet == CallBluff():
@@ -246,27 +253,25 @@ def y_information_sets():
             instant_call = [Move2('Y', i1, i2, [starting_bet, CallBluff()])]
             starting_bet_reactions = [
                 Move2('Y', i1, i2, [starting_bet, y_bet_reaction_bet1, y_bet_reaction_bet2])
-                for y_bet_reaction_bet1 in starting_bet.possible_bets_afterwards()
+                for y_bet_reaction_bet1 in starting_bet.possible_reg_bets_afterwards()
                 for y_bet_reaction_bet2 in y_bet_reaction_bet1.possible_bets_afterwards()
                 ]
-            if len(starting_bet_reactions) > 0:
-                yield (Move2('Y', i1, i2, []), instant_call + starting_bet_reactions)
+            yield (Move2('Y', i1, i2, []), instant_call +  starting_bet_reactions)
 
     for y_move in possible_ys[DIE_FACES ** 2 + 1:]:
         bets = y_move.bets_made
 
         i1, i2 = y_move.faces_thrown1, y_move.faces_thrown2
 
-        for x_bet in bets[-1].possible_bets_afterwards():
+        for x_bet in bets[-1].possible_reg_bets_afterwards():
             i1, i2 = y_move.faces_thrown1, y_move.faces_thrown2
             instant_call = [Move2('Y', i1, i2, bets + [x_bet, CallBluff()])]
             x_bet_y_reactions = [
                 Move2('Y', i1, i2, bets + [x_bet, y_bet1, y_bet2])
-                for y_bet1 in x_bet.possible_bets_afterwards()
+                for y_bet1 in x_bet.possible_reg_bets_afterwards()
                 for y_bet2 in y_bet1.possible_bets_afterwards()
                 ]
-            if len(x_bet_y_reactions) > 0:
-                yield (y_move, instant_call + x_bet_y_reactions)
+            yield (y_move, x_bet_y_reactions)
 
 
 y_inf_sets = list(y_information_sets())
@@ -329,9 +334,6 @@ for x_name in possible_xs:
     if p.get_values(x[x_name]) > 0:
         print(x_name, ' val: ', p.get_values(x[x_name]))
 
-
-# -------------------
-# STRATEGIA DLA PODWOJNEGO GRACZA
 y_inf_sets_mat_T = list(zip(*y_inf_sets_mat))
 x_inf_sets_mat_T = list(zip(*x_inf_sets_mat))
 A = list(zip(*A_T))
